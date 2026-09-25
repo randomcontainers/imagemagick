@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE typemap [
+  <!ELEMENT typemap (type)+>
+  <!ATTLIST typemap xmlns CDATA #FIXED ''>
+  <!ELEMENT type EMPTY>
+  <!ATTLIST type xmlns CDATA #FIXED '' encoding NMTOKEN #IMPLIED
+    family CDATA #REQUIRED format NMTOKEN #REQUIRED foundry NMTOKEN #REQUIRED
+    fullname CDATA #REQUIRED glyphs CDATA #REQUIRED metrics CDATA #REQUIRED
+    name NMTOKEN #REQUIRED stretch NMTOKEN #REQUIRED style NMTOKEN #REQUIRED
+    version CDATA #IMPLIED weight CDATA #REQUIRED>
+]>
+<!--
+  Replaces config/type-dejavu.xml.in of the ImageMagick source before
+  configure. The upstream file points at URW font files inside the DejaVu
+  directory, so none of its entries load, and text drawn without -font then
+  fails with "unable to read font".
+
+  ImageMagick's default font is the first Helvetica or Arial it knows. The
+  images ship only DejaVu, so the PostScript core names and the SVG generic
+  families map to DejaVu, as fontconfig's aliases do. fontconfig also lists
+  every DejaVu font under its own name, for example -font DejaVu-Sans-Bold.
+-->
+<typemap>
+  <type name="Helvetica" fullname="Helvetica" family="Helvetica" foundry="DejaVu"
+    weight="400" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSans.ttf"/>
+  <type name="Helvetica-Bold" fullname="Helvetica Bold" family="Helvetica" foundry="DejaVu"
+    weight="700" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSans-Bold.ttf"/>
+  <type name="Times-Roman" fullname="Times Roman" family="Times" foundry="DejaVu"
+    weight="400" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSerif.ttf"/>
+  <type name="Times-Bold" fullname="Times Bold" family="Times" foundry="DejaVu"
+    weight="700" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSerif-Bold.ttf"/>
+  <type name="Courier" fullname="Courier" family="Courier" foundry="DejaVu"
+    weight="400" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSansMono.ttf"/>
+  <type name="Courier-Bold" fullname="Courier Bold" family="Courier" foundry="DejaVu"
+    weight="700" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSansMono-Bold.ttf"/>
+  <type name="sans-serif" fullname="sans-serif" family="sans-serif" foundry="DejaVu"
+    weight="400" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSans.ttf"/>
+  <type name="sans-serif-Bold" fullname="sans-serif Bold" family="sans-serif" foundry="DejaVu"
+    weight="700" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSans-Bold.ttf"/>
+  <type name="serif" fullname="serif" family="serif" foundry="DejaVu"
+    weight="400" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSerif.ttf"/>
+  <type name="serif-Bold" fullname="serif Bold" family="serif" foundry="DejaVu"
+    weight="700" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSerif-Bold.ttf"/>
+  <type name="monospace" fullname="monospace" family="monospace" foundry="DejaVu"
+    weight="400" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSansMono.ttf"/>
+  <type name="monospace-Bold" fullname="monospace Bold" family="monospace" foundry="DejaVu"
+    weight="700" style="normal" stretch="normal" format="truetype"
+    glyphs="@dejavu_font_dir@DejaVuSansMono-Bold.ttf"/>
+</typemap>

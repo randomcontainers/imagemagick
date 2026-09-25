@@ -31,11 +31,14 @@ ARG VERSION
 ARG SOURCE_SHA256
 ADD --checksum=sha256:${SOURCE_SHA256} https://github.com/ImageMagick/ImageMagick/releases/download/${VERSION}/ImageMagick-${VERSION}.tar.xz /src/
 WORKDIR /src/ImageMagick
-# --without-gcc-arch stops configure from tuning the build for the runner's
-# CPU model.
+# type-dejavu.xml.in replaces the upstream copy, whose entries point at
+# font files that do not exist. --without-gcc-arch stops configure from
+# tuning the build for the runner's CPU model.
 ARG JOBS
-RUN set -eu; \
+RUN --mount=type=bind,source=type-dejavu.xml.in,target=/tmp/type-dejavu.xml.in \
+    set -eu; \
     tar -xJf "/src/ImageMagick-${VERSION}.tar.xz" --strip-components=1; \
+    cp /tmp/type-dejavu.xml.in config/type-dejavu.xml.in; \
     ./configure \
       --prefix=/usr/local \
       --disable-dependency-tracking \

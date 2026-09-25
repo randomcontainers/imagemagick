@@ -51,6 +51,26 @@ test:
     Z//1KLd8TRv0UglOg2i4
     EOF
     test "$(magick blue.heic -format '%wx%h %[fx:p{32,24}.b>0.9 && p{32,24}.r<0.1]' info:)" = '64x48 1'
+  - |
+    # The tests run as an arbitrary UID with HOME=/, so a fontconfig cache
+    # problem shows up here as a warning on stderr.
+    magick -list font > fonts.txt 2> fonts.err
+    if [ -s fonts.err ]; then cat fonts.err >&2; exit 1; fi
+    grep -Fq 'Font: DejaVu-Sans' fonts.txt
+    # Without -font, ImageMagick draws text with its Helvetica entry.
+    if ! magick -size 200x40 label:ok label.png 2> label.err || [ -s label.err ]; then
+      cat label.err >&2
+      exit 1
+    fi
+    test "$(magick label.png -format '%[fx:standard_deviation>0]' info:)" = 1
+    printf '%s\n' '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">' \
+      '<rect width="80" height="40" fill="blue"/>' \
+      '<text x="4" y="28" font-family="sans-serif" font-size="20" fill="white">ok</text></svg>' > text.svg
+    if ! magick text.svg text.png 2> svg.err || [ -s svg.err ]; then
+      cat svg.err >&2
+      exit 1
+    fi
+    test "$(magick text.png -format '%wx%h %[fx:standard_deviation>0]' info:)" = '80x40 1'
 examples:
   - title: Convert an image to WebP
     command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick input.png -quality 80 output.webp
