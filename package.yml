@@ -78,3 +78,38 @@ examples:
     command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick photo.heic -resize 1600x1600 -strip photo.jpg
   - title: Make a contact sheet of every JPEG in the current directory
     command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick montage -geometry 240x240+4+4 *.jpg contact-sheet.jpg
+  - title: Render the first page of a PDF at 150 dpi (default image)
+    command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick -density 150 "input.pdf[0]" page-1.png
+combos:
+  - with: [ghostscript]
+    default: true
+    base: ghostscript
+    summary: ImageMagick with Ghostscript, for reading and writing PDF, PostScript and EPS files.
+    test:
+      - |
+        # Every read of a PDF, PostScript or EPS file runs Ghostscript.
+        is_red() {
+          test "$(magick "$1" -format '%[fx:p{w/2,h/2}.r>0.9 && p{w/2,h/2}.g<0.1 && p{w/2,h/2}.b<0.1]' info:)" = 1
+        }
+        magick -size 32x32 xc:red a.pdf
+        magick a.pdf a.png
+        is_red a.png
+        magick a.pdf a.eps
+        magick a.eps b.png
+        is_red b.png
+        magick a.pdf a.ps
+        magick a.ps c.png
+        is_red c.png
+        printf '%s\n' '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">' \
+          '<rect width="32" height="32" fill="red"/></svg>' > a.svg
+        magick a.svg svg.pdf
+        magick svg.pdf d.png
+        is_red d.png
+      - |
+        magick -size 32x32 xc:red xc:blue two.pdf
+        test "$(magick identify two.pdf | wc -l)" -eq 2
+        # Ghostscript draws this text with its own URW fonts.
+        printf '%s\n' '%!PS-Adobe-3.0 EPSF-3.0' '%%BoundingBox: 0 0 120 40' \
+          '/Helvetica findfont 24 scalefont setfont' '8 12 moveto (ok) show' 'showpage' > text.eps
+        magick -density 72 text.eps -background white -alpha remove text.png
+        test "$(magick text.png -format '%wx%h %[fx:standard_deviation>0]' info:)" = '120x40 1'
