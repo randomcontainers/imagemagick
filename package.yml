@@ -71,6 +71,23 @@ test:
       exit 1
     fi
     test "$(magick text.png -format '%wx%h %[fx:standard_deviation>0]' info:)" = '80x40 1'
+  - |
+    magick -list policy > policy.txt
+    grep -Fq 'Path: /usr/local/etc/ImageMagick-7/policy.xml' policy.txt
+    grep -Fq 'pattern: @*' policy.txt
+    grep -Fq 'pattern: {MSL}' policy.txt
+    # PS, EPS, PDF and SVG must stay usable for the Ghostscript default image,
+    # and resource limits would cap what -limit can set.
+    if grep -Eq 'Policy: (Coder|Delegate|Resource)' policy.txt || grep -Eiq 'pattern: .*(PS|PDF|SVG)' policy.txt; then
+      cat policy.txt >&2
+      exit 1
+    fi
+    echo secret > secret.txt
+    if magick label:@secret.txt indirect.png 2> indirect.err; then
+      echo "indirect read was allowed" >&2
+      exit 1
+    fi
+    grep -q 'not authorized' indirect.err
 examples:
   - title: Convert an image to WebP
     command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick input.png -quality 80 output.webp

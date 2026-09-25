@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policymap [
+<!ELEMENT policymap (policy)*>
+<!ATTLIST policymap xmlns CDATA #FIXED "">
+<!ELEMENT policy EMPTY>
+<!ATTLIST policy xmlns CDATA #FIXED "">
+<!ATTLIST policy domain NMTOKEN #REQUIRED>
+<!ATTLIST policy name NMTOKEN #IMPLIED>
+<!ATTLIST policy pattern CDATA #IMPLIED>
+<!ATTLIST policy rights NMTOKEN #IMPLIED>
+<!ATTLIST policy stealth NMTOKEN #IMPLIED>
+<!ATTLIST policy value CDATA #IMPLIED>
+]>
+<!--
+  ImageMagick's "open" policy with two additions. Installed as
+  /usr/local/etc/ImageMagick-7/policy.xml in the slim and default images.
+
+  There are no resource limits here on purpose: a policy value is a ceiling
+  that -limit and MAGICK_*_LIMIT cannot raise. Limit a container with
+  docker run memory and CPU flags, and ImageMagick with -limit or
+  MAGICK_THREAD_LIMIT.
+
+  PS, EPS, PDF and SVG stay readable and the Ghostscript delegate stays
+  allowed, so the default image can convert documents. Ghostscript runs
+  with -dSAFER.
+-->
+<policymap>
+  <policy domain="Undefined" rights="none"/>
+  <!-- Blocks indirect reads such as label:@file and @list.txt, also when they
+       appear inside SVG or MVG content. -->
+  <policy domain="path" rights="none" pattern="@*"/>
+  <!-- MSL is a scripting language that can read and write arbitrary files. -->
+  <policy domain="module" rights="none" pattern="{MSL}"/>
+</policymap>

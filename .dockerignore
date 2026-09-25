@@ -1,4 +1,5 @@
 *
+!policy.xml
 !runtime-deps.alpine
 !runtime-deps.ubuntu
 !type-dejavu.xml.in

@@ -80,6 +80,7 @@ RUN --mount=type=bind,source=type-dejavu.xml.in,target=/tmp/type-dejavu.xml.in \
     make install-strip DESTDIR=/out; \
     rm -rf /out/usr/local/include /out/usr/local/lib/pkgconfig /out/usr/local/share/doc /out/usr/local/share/man; \
     rm -f /out/usr/local/bin/*-config /out/usr/local/lib/*.la
+COPY --link policy.xml /out/usr/local/etc/ImageMagick-7/policy.xml
 
 ARG BASE_IMAGE
 # configure drops a delegate without failing when its library is missing, so
