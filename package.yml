@@ -1,0 +1,60 @@
+name: imagemagick
+title: ImageMagick
+summary: Converts and edits images, with JPEG, PNG, TIFF, WebP, HEIC, AVIF, JPEG XL, JPEG 2000 and camera raw support.
+homepage: https://imagemagick.org/
+license: ImageMagick
+upstream:
+  source: github-release
+  repository: ImageMagick/ImageMagick
+  # Release tags look like 7.1.2-31. ImageMagick 6 is released from a separate repository.
+  tag-pattern: '^(7\.\d+\.\d+-\d+)$'
+  version-template: '{1}'
+  versioning: loose
+  version: 7.1.2-31
+  artifact:
+    url: https://github.com/ImageMagick/ImageMagick/releases/download/{version}/ImageMagick-{version}.tar.xz
+    sha256: 168a9710b3a8d69dbd20eb0a35f145b0c0ed35f076b2fc98d3eb57daa919c376
+image:
+  entrypoint: [magick]
+  cmd: [-version]
+test:
+  - |
+    magick -version > version.txt
+    head -n 1 version.txt | grep -Fq "Version: ImageMagick $VERSION Q16-HDRI "
+    for tool in compare composite convert identify mogrify montage; do
+      test "$(readlink "/usr/local/bin/$tool")" = magick
+    done
+    identify -version | head -n 1 | grep -Fq "$VERSION"
+  - |
+    # Listing formats loads every coder module, so a missing library shows up on stderr.
+    magick -list format > formats.txt 2> formats.err
+    if [ -s formats.err ]; then cat formats.err >&2; exit 1; fi
+    for f in JPEG:rw PNG:rw TIFF:rw WEBP:rw HEIC:r AVIF:rw JXL:rw JP2:rw DNG:r SVG:rw PDF:rw PS:rw EPS:rw; do
+      grep -Eq "^ *${f%%:*}\*? +[A-Z0-9]+ +${f#*:}" formats.txt || { echo "format ${f%%:*} is not ${f#*:}" >&2; exit 1; }
+    done
+  - |
+    for ext in jpg png tif webp avif jxl jp2; do
+      magick -size 64x48 gradient:red-blue "gradient.$ext"
+      test "$(magick "gradient.$ext" -format %wx%h info:)" = 64x48
+    done
+    # A 64x48 blue HEIC. libheif decodes HEVC with a plugin that it loads at
+    # run time, so only decoding a real file shows that the plugin is there.
+    base64 -d > blue.heic <<'EOF'
+    AAAAJGZ0eXBoZWljAAAAAG1pZjFNaVBybWlhZk1pSEJoZWljAAABi21ldGEAAAAAAAAAIWhkbHIA
+    AAAAAAAAAHBpY3QAAAAAAAAAAAAAAAAAAAAAJGRpbmYAAAAcZHJlZgAAAAAAAAABAAAADHVybCAA
+    AAABAAAADnBpdG0AAAAAAAEAAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABodmMxAAAAAOtp
+    cHJwAAAAymlwY28AAAATY29scm5jbHgAAgACAAaAAAAADGNsbGkAywBAAAAAFGlzcGUAAAAAAAAA
+    QAAAADAAAAAJaXJvdAAAAAAQcGl4aQAAAAADCAgIAAAAdmh2Y0MBAWAAAACwAAAAAAAe8AD8/fj4
+    AAAPA6AAAQAXQAEMAf//AWAAAAMAsAAAAwAAAwAeLAmhAAEAIUIBAQFgAAADALAAAAMAAAMAHqAg
+    gxZy5JEpJcTcCAgYAqIAAQAQRAHAckwE6RERJEkSRJEqQAAAABlpcG1hAAAAAAAAAAEAAQaBAgMF
+    hoQAAAAeaWxvYwAAAABEAAABAAEAAAABAAABvwAAABgAAAABbWRhdAAAAAAAAAAoAAAAFCYBrcCz
+    Z//1KLd8TRv0UglOg2i4
+    EOF
+    test "$(magick blue.heic -format '%wx%h %[fx:p{32,24}.b>0.9 && p{32,24}.r<0.1]' info:)" = '64x48 1'
+examples:
+  - title: Convert an image to WebP
+    command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick input.png -quality 80 output.webp
+  - title: Resize a photo to fit in 1600x1600 and strip its metadata
+    command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick photo.heic -resize 1600x1600 -strip photo.jpg
+  - title: Make a contact sheet of every JPEG in the current directory
+    command: docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/randomcontainers/imagemagick montage -geometry 240x240+4+4 *.jpg contact-sheet.jpg

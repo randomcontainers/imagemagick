@@ -1,0 +1,5 @@
+fontconfig
+fonts-dejavu-core
+libheif-plugin-aomenc
+libheif-plugin-dav1d
+libheif-plugin-libde265

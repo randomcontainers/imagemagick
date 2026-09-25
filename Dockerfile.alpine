@@ -1,0 +1,123 @@
+# syntax=docker/dockerfile:1.27.0@sha256:bde3983e9c939224420ddaf6b784cc30e09b035a4dea01f581230c50809f372e
+# check=error=true
+
+ARG BASE_IMAGE=alpine:3.24
+
+FROM ${BASE_IMAGE} AS build
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+RUN apk add --no-cache \
+      build-base \
+      bzip2-dev \
+      fontconfig-dev \
+      freetype-dev \
+      lcms2-dev \
+      libheif-dev \
+      libjpeg-turbo-dev \
+      libjxl-dev \
+      libpng-dev \
+      libraw-dev \
+      libtool \
+      libwebp-dev \
+      libxml2-dev \
+      openjpeg-dev \
+      pkgconf \
+      scanelf \
+      tiff-dev \
+      xz \
+      xz-dev \
+      zlib-dev \
+      zstd-dev
+ARG VERSION
+ARG SOURCE_SHA256
+ADD --checksum=sha256:${SOURCE_SHA256} https://github.com/ImageMagick/ImageMagick/releases/download/${VERSION}/ImageMagick-${VERSION}.tar.xz /src/
+WORKDIR /src/ImageMagick
+# --without-gcc-arch stops configure from tuning the build for the runner's
+# CPU model.
+ARG JOBS
+RUN set -eu; \
+    tar -xJf "/src/ImageMagick-${VERSION}.tar.xz" --strip-components=1; \
+    ./configure \
+      --prefix=/usr/local \
+      --disable-dependency-tracking \
+      --disable-static \
+      --disable-docs \
+      --enable-hdri \
+      --with-quantum-depth=16 \
+      --with-modules \
+      --with-security-policy=open \
+      --with-dejavu-font-dir=/usr/share/fonts/dejavu \
+      --without-frozenpaths \
+      --without-gcc-arch \
+      --without-gslib \
+      --without-magick-plus-plus \
+      --without-perl \
+      --without-x \
+      --with-bzlib \
+      --with-fontconfig \
+      --with-freetype \
+      --with-heic \
+      --with-jpeg \
+      --with-jxl \
+      --with-lcms \
+      --with-lzma \
+      --with-openjp2 \
+      --with-png \
+      --with-raw \
+      --with-tiff \
+      --with-webp \
+      --with-xml \
+      --with-zlib \
+      --with-zstd; \
+    make -j"${JOBS:-$(nproc)}"; \
+    make install-strip DESTDIR=/out; \
+    rm -rf /out/usr/local/include /out/usr/local/lib/pkgconfig /out/usr/local/share/doc /out/usr/local/share/man; \
+    rm -f /out/usr/local/bin/*-config /out/usr/local/lib/*.la
+
+ARG BASE_IMAGE
+# configure drops a delegate without failing when its library is missing, so
+# the delegate list is checked here. runtime-deps lists the so: names the
+# binaries and coder modules need, minus the libraries built here, plus the
+# packages in runtime-deps.alpine.
+RUN --mount=type=bind,source=runtime-deps.alpine,target=/tmp/runtime-deps.extra \
+    set -eu; \
+    meta=/out/usr/local/share/randomcontainers/imagemagick; \
+    mkdir -p "$meta/licenses"; \
+    cp LICENSE NOTICE "$meta/licenses/"; \
+    echo "${VERSION}" > "$meta/version"; \
+    echo "https://github.com/ImageMagick/ImageMagick/releases/download/${VERSION}/ImageMagick-${VERSION}.tar.xz" > "$meta/source"; \
+    LD_LIBRARY_PATH=/out/usr/local/lib /out/usr/local/bin/magick -version > /tmp/magick-version; \
+    grep -q "^Version: ImageMagick ${VERSION} Q16-HDRI " /tmp/magick-version; \
+    missing=; \
+    for f in HDRI Modules OpenMP; do \
+      grep '^Features:' /tmp/magick-version | grep -qw "$f" || missing="$missing $f"; \
+    done; \
+    for d in bzlib fontconfig freetype heic jng jp2 jpeg jxl lcms ltdl lzma png raw tiff webp xml zlib zstd; do \
+      grep '^Delegates' /tmp/magick-version | grep -qw "$d" || missing="$missing $d"; \
+    done; \
+    if [ -n "$missing" ]; then cat /tmp/magick-version >&2; echo "missing:$missing" >&2; exit 1; fi; \
+    { \
+      echo "base: ${BASE_IMAGE}"; \
+      echo "compiler: $(cc --version | head -n 1)"; \
+      sed -n 's/^  \$ \(\.\/configure .*\)/\1/p' config.log; \
+      cat /tmp/magick-version; \
+    } > "$meta/buildinfo"; \
+    scanelf --needed --nobanner --format '%n#p' --recursive /out/usr/local | tr ',' '\n' | sort -u > /tmp/needed; \
+    while read -r so; do \
+      if [ -n "$so" ] && [ -z "$(find /out -name "$so" -print -quit)" ]; then echo "so:$so"; fi; \
+    done < /tmp/needed > /tmp/elf-deps; \
+    test -s /tmp/elf-deps; \
+    sort -u /tmp/elf-deps /tmp/runtime-deps.extra > "$meta/runtime-deps"
+
+FROM ${BASE_IMAGE} AS slim
+COPY --link --from=build /out/usr/local/ /usr/local/
+RUN set -eu; \
+    xargs apk add --no-cache ca-certificates tini < /usr/local/share/randomcontainers/imagemagick/runtime-deps; \
+    fc-cache -f; \
+    addgroup -g 1000 app; \
+    adduser -D -u 1000 -G app app; \
+    install -d -m 1777 /work /cache
+ENV LANG=C.UTF-8 XDG_CACHE_HOME=/cache
+WORKDIR /work
+USER 1000:1000
+ENTRYPOINT ["tini", "--", "magick"]
+CMD ["-version"]
