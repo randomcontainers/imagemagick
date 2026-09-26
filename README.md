@@ -54,7 +54,7 @@ Text drawn with `label:`, `caption:`, `-annotate` or SVG uses DejaVu Sans unless
 
 ## Default or slim
 
-Use the default image (`latest`) for general work: it also reads PDF, PostScript and EPS files, with no extra setup. `slim` has ImageMagick and the libraries it needs, without Ghostscript; use it to build your own image, or when you only work with raster formats and SVG.
+Use the default image (`latest`) for general work: it also reads PDF, PostScript and EPS files, with no extra setup. `slim` has ImageMagick and the libraries it needs, without Ghostscript; use it to build your own image, or when you only work with raster formats and SVG. The default images of [ExifTool](https://github.com/randomcontainers/exiftool) and [jpegoptim](https://github.com/randomcontainers/jpegoptim) include the `slim` build.
 
 The default image includes Ghostscript, which is licensed under the GNU Affero General Public License (AGPL-3.0-or-later). Use `slim` if your policy excludes AGPL. The default image is also published as `ghcr.io/randomcontainers/imagemagick-ghostscript`, built in the [imagemagick-ghostscript](https://github.com/randomcontainers/imagemagick-ghostscript) repository with the same contents and a different digest.
 
