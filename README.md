@@ -1,6 +1,6 @@
 # imagemagick
 
-Container images with [ImageMagick](https://imagemagick.org/) 7, compiled from the upstream release against the image libraries of Ubuntu or Alpine. The default image also contains Ghostscript, which ImageMagick needs to read PDF, PostScript and EPS files. The images are rebuilt when ImageMagick publishes a release and when the base image changes, for `linux/amd64` and `linux/arm64`.
+Container images with [ImageMagick](https://imagemagick.org/) 7, compiled from the upstream release against the image libraries of Ubuntu or Alpine. libheif, which ImageMagick uses for HEIC and AVIF, and the HEVC decoder libde265 are compiled from their upstream releases too. The default image also contains Ghostscript, which ImageMagick needs to read PDF, PostScript and EPS files. The images are rebuilt when ImageMagick publishes a release and when the base image changes, for `linux/amd64` and `linux/arm64`.
 
 This is an unofficial build, not affiliated with or endorsed by the ImageMagick project. Report problems with the image in this repository and problems with ImageMagick itself [upstream](https://github.com/ImageMagick/ImageMagick/issues).
 
@@ -37,14 +37,16 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
 | Area | Details |
 |---|---|
 | Build | ImageMagick 7, Q16 with HDRI, OpenMP, coders as loadable modules |
-| Raster formats | JPEG (libjpeg-turbo), PNG, GIF, TIFF, WebP, JPEG XL, JPEG 2000 (OpenJPEG), AVIF (libheif with aom and dav1d), HEIC (read only, libde265) |
+| Raster formats | JPEG (libjpeg-turbo), PNG, GIF, TIFF, WebP, JPEG XL, JPEG 2000 (OpenJPEG), AVIF (libheif with aom and dav1d), HEIC (read only, libheif with libde265) |
 | Camera raw | DNG, CR2, CR3, NEF, ARW and the other formats LibRaw reads |
 | Vector | SVG through ImageMagick's built-in renderer and libxml2 |
 | Documents | PDF, PostScript and EPS. Both images write them; reading them needs Ghostscript, which only the default image has |
 | Color and compression | Little CMS 2, zlib, zstd, xz, bzip2 |
 | Text | FreeType, fontconfig and the DejaVu fonts |
 
-Not included: X11 (`display`, `animate` and `import` exit with an error), librsvg, Pango, OpenEXR, FFTW, HEIC encoding (no HEVC encoder plugin is installed), video formats that ImageMagick hands to `ffmpeg`, the Perl and C++ bindings, and the C headers. The configure flags and the full `magick -version` output are in `/usr/local/share/randomcontainers/imagemagick/buildinfo`.
+The Ubuntu and Alpine libde265 packages lack upstream security fixes, so libde265 and libheif are compiled here instead. The codecs are built into libheif, which loads no plugins; aom and dav1d come from the distro.
+
+Not included: X11 (`display`, `animate` and `import` exit with an error), librsvg, Pango, OpenEXR, FFTW, HEIC encoding (libheif is built without an HEVC encoder), video formats that ImageMagick hands to `ffmpeg`, the Perl and C++ bindings, and the C headers. The configure flags, the libheif and libde265 versions and the full `magick -version` output are in `/usr/local/share/randomcontainers/imagemagick/buildinfo`.
 
 ### Fonts
 
@@ -151,7 +153,9 @@ Each platform image also carries an SPDX SBOM that lists every distro package wi
 docker buildx imagetools inspect ghcr.io/randomcontainers/imagemagick:latest --format '{{ json .SBOM }}'
 ```
 
-The build downloads the source archive that ImageMagick attaches to its GitHub release (`ImageMagick-<version>.tar.xz`, not the automatic tag archive) and checks it against the SHA-256 recorded in `package.yml` before compiling.
+libheif and libde265 are compiled here, so they are not in the SBOM and image scanners do not check them. Their versions are in `/usr/local/share/randomcontainers/imagemagick/buildinfo`.
+
+The build downloads the source archives that ImageMagick, libheif and libde265 attach to their GitHub releases (for ImageMagick `ImageMagick-<version>.tar.xz`, not the automatic tag archive) and checks each one against the SHA-256 recorded in `package.yml` before compiling.
 
 ## Updates
 
@@ -159,22 +163,37 @@ The project checks the [ImageMagick/ImageMagick](https://github.com/ImageMagick/
 
 The images of the current version are also rebuilt when the Ubuntu or Alpine base image changes, the default ones when a new Ghostscript image is published, and all of them at least every 7 days, so distro security fixes reach the current tags.
 
+libheif and libde265 are pinned to a version in `package.yml` and do not follow their upstream releases automatically. Updating one is a commit to `package.yml`, which rebuilds the images of the current ImageMagick version.
+
 ## Building
 
 ```sh
 docker build -f Dockerfile.ubuntu --target slim \
   --build-arg VERSION=<version> \
   --build-arg SOURCE_SHA256=<sha256 from package.yml> \
+  --build-arg LIBDE265_VERSION=<version> \
+  --build-arg LIBDE265_SHA256=<sha256> \
+  --build-arg LIBHEIF_VERSION=<version> \
+  --build-arg LIBHEIF_SHA256=<sha256> \
   -t imagemagick:local .
 ```
 
-Use `Dockerfile.alpine` for the Alpine image. `--build-arg JOBS=<n>` limits the number of parallel compile jobs. The default image is generated from the `combos` entry in `package.yml` by [randomcontainers/ci](https://github.com/randomcontainers/ci).
+The `LIBDE265_*` and `LIBHEIF_*` values are the `version` and `sha256` of the `extra-artifacts` entries in `package.yml`. Use `Dockerfile.alpine` for the Alpine image. `--build-arg JOBS=<n>` limits the number of parallel compile jobs. The default image is generated from the `combos` entry in `package.yml` by [randomcontainers/ci](https://github.com/randomcontainers/ci).
 
 ## Licenses
 
-ImageMagick is distributed under the [ImageMagick License](https://imagemagick.org/license/) (SPDX `ImageMagick`). Its license and notice files are in `/usr/local/share/randomcontainers/imagemagick/licenses/`, and the source archive URL is in `/usr/local/share/randomcontainers/imagemagick/source`.
+ImageMagick is distributed under the [ImageMagick License](https://imagemagick.org/license/) (SPDX `ImageMagick`). Its license and notice files are in `/usr/local/share/randomcontainers/imagemagick/licenses/`.
 
-The default image adds Ghostscript, licensed under AGPL-3.0-or-later; see [randomcontainers/ghostscript](https://github.com/randomcontainers/ghostscript) for its sources and license files. The libraries and fonts from Ubuntu or Alpine keep their own licenses, for example LGPL for libheif, libde265 and LibRaw, and the DejaVu font license. The SBOM lists them.
+libheif and libde265 are licensed under the GNU Lesser General Public License, version 3 or later (LGPL-3.0-or-later), so the image's license label is `ImageMagick AND LGPL-3.0-or-later`. Their license files are `COPYING.libheif` and `COPYING.libde265` in the same directory. The libraries and fonts from Ubuntu or Alpine keep their own licenses, for example LGPL for LibRaw, BSD-2-Clause for aom and dav1d, and the DejaVu font license. The SBOM lists them.
+
+The corresponding source for each image:
+
+- ImageMagick, libheif and libde265: every ImageMagick version has a GitHub release in this repository, named `v<version>`, with the exact `ImageMagick-<version>.tar.xz` and the libheif and libde265 archives that were compiled. The build applies no patches. It only replaces ImageMagick's font map, `config/type-dejavu.xml.in`, with [the copy in this repository](type-dejavu.xml.in). `/usr/local/share/randomcontainers/imagemagick/source` lists that release and the download URLs of the three archives. When libheif or libde265 is updated, the release also keeps the archive of the earlier version.
+- Build scripts: this repository at the commit in the image's `org.opencontainers.image.revision` label. The Dockerfiles hold every configure and CMake option.
+- Ubuntu packages: the source packages on [Launchpad](https://launchpad.net/ubuntu) for the versions listed in the SBOM. `apt-get source <package>=<version>` fetches a version that is still in the Ubuntu archive.
+- Alpine packages: Alpine has no source packages. For the versions listed in the SBOM, the source is the APKBUILD and patches in [aports](https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable), branch `3.24-stable`, and the archives on [distfiles.alpinelinux.org](https://distfiles.alpinelinux.org/distfiles/v3.24/).
+
+The default image adds Ghostscript, licensed under AGPL-3.0-or-later; see [randomcontainers/ghostscript](https://github.com/randomcontainers/ghostscript) for its sources and license files.
 
 Some formats, such as HEIC, may be covered by patents in some countries. Check what applies where you use them.
 
