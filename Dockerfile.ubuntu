@@ -8,14 +8,20 @@ ARG DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-eo", "pipefail", "-c"]
 # The base image's own packages are recorded first so they can be left out of
 # runtime-deps; every image built from this list starts from the same base.
+# aom-tools, libwebm-dev and libyuv-dev are needed only to build libheif. The
+# CMake package in libaom-dev declares aomdec and aomenc from aom-tools, which
+# CMake requires to exist, and lists libwebm and libyuv as link dependencies.
 RUN dpkg-query -W -f '${Package}\n' | sort -u > /tmp/base-packages \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
+      aom-tools \
       build-essential \
+      cmake \
+      libaom-dev \
       libbz2-dev \
+      libdav1d-dev \
       libfontconfig-dev \
       libfreetype-dev \
-      libheif-dev \
       libjpeg-turbo8-dev \
       libjxl-dev \
       liblcms2-dev \
@@ -24,22 +30,85 @@ RUN dpkg-query -W -f '${Package}\n' | sort -u > /tmp/base-packages \
       libopenjp2-7-dev \
       libpng-dev \
       libraw-dev \
+      libsharpyuv-dev \
       libtiff-dev \
+      libwebm-dev \
       libwebp-dev \
       libxml2-dev \
+      libyuv-dev \
       libzstd-dev \
       pkgconf \
       xz-utils \
       zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
+ARG JOBS
+
+# Ubuntu's libde265 lacks upstream security fixes, and its libheif decodes
+# HEIC through a plugin that depends on it, so both libraries are compiled
+# from their upstream releases. They are installed twice: into /usr/local for
+# the ImageMagick build and into /out for the image.
+ARG LIBDE265_VERSION
+ARG LIBDE265_SHA256
+ADD --checksum=sha256:${LIBDE265_SHA256} https://github.com/strukturag/libde265/releases/download/v${LIBDE265_VERSION}/libde265-${LIBDE265_VERSION}.tar.gz /src/libde265.tar.gz
+WORKDIR /src/libde265
+RUN set -eu; \
+    tar -xzf /src/libde265.tar.gz --strip-components=1; \
+    cmake -S . -B build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DCMAKE_INSTALL_LIBDIR=lib \
+      -DENABLE_DECODER=OFF \
+      -DENABLE_SDL=OFF; \
+    cmake --build build -j"${JOBS:-$(nproc)}"; \
+    cmake --install build --strip; \
+    DESTDIR=/out cmake --install build --strip
+
+ARG LIBHEIF_VERSION
+ARG LIBHEIF_SHA256
+ADD --checksum=sha256:${LIBHEIF_SHA256} https://github.com/strukturag/libheif/releases/download/v${LIBHEIF_VERSION}/libheif-${LIBHEIF_VERSION}.tar.gz /src/libheif.tar.gz
+WORKDIR /src/libheif
+# The codecs are compiled into libheif instead of being loaded as plugins, so
+# the runtime-deps scan below finds aom and dav1d. The RUNPATH keeps libheif
+# on the libde265 built here even in an image that also has the Ubuntu
+# package: on arm64 the loader searches /usr/lib/aarch64-linux-gnu before
+# /usr/local/lib.
+RUN set -eu; \
+    tar -xzf /src/libheif.tar.gz --strip-components=1; \
+    cmake -S . -B build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DCMAKE_INSTALL_LIBDIR=lib \
+      -DCMAKE_INSTALL_RPATH=/usr/local/lib \
+      -DENABLE_PLUGIN_LOADING=OFF \
+      -DWITH_LIBDE265=ON \
+      -DWITH_DAV1D=ON \
+      -DWITH_AOM_ENCODER=ON \
+      -DWITH_AOM_DECODER=OFF \
+      -DWITH_OpenH264_DECODER=OFF \
+      -DWITH_X264=OFF \
+      -DWITH_X265=OFF \
+      -DWITH_EXAMPLES=OFF \
+      -DWITH_GDK_PIXBUF=OFF \
+      -DBUILD_DOCUMENTATION=OFF \
+      -DBUILD_TESTING=OFF; \
+    cmake --build build -j"${JOBS:-$(nproc)}"; \
+    cmake --install build --strip; \
+    DESTDIR=/out cmake --install build --strip; \
+    ldconfig; \
+    readelf -d /usr/local/lib/libheif.so.1 > /tmp/libheif-dynamic; \
+    for lib in libde265.so.0 libaom.so libdav1d.so libsharpyuv.so; do \
+      grep -Fq "Shared library: [$lib" /tmp/libheif-dynamic || { cat /tmp/libheif-dynamic >&2; echo "libheif does not link $lib" >&2; exit 1; }; \
+    done; \
+    grep -Eq 'Library (rpath|runpath): \[/usr/local/lib\]' /tmp/libheif-dynamic
+
 ARG VERSION
 ARG SOURCE_SHA256
 ADD --checksum=sha256:${SOURCE_SHA256} https://github.com/ImageMagick/ImageMagick/releases/download/${VERSION}/ImageMagick-${VERSION}.tar.xz /src/
 WORKDIR /src/ImageMagick
 # type-dejavu.xml.in replaces the upstream copy, whose entries point at
 # font files that do not exist. --without-gcc-arch stops configure from
-# tuning the build for the runner's CPU model.
-ARG JOBS
+# tuning the build for the runner's CPU model. The RUNPATH makes the coders
+# load the libheif built above, for the same reason as libheif's.
 RUN --mount=type=bind,source=type-dejavu.xml.in,target=/tmp/type-dejavu.xml.in \
     set -eu; \
     tar -xJf "/src/ImageMagick-${VERSION}.tar.xz" --strip-components=1; \
@@ -75,10 +144,11 @@ RUN --mount=type=bind,source=type-dejavu.xml.in,target=/tmp/type-dejavu.xml.in \
       --with-webp \
       --with-xml \
       --with-zlib \
-      --with-zstd; \
+      --with-zstd \
+      LDFLAGS=-Wl,-rpath,/usr/local/lib; \
     make -j"${JOBS:-$(nproc)}"; \
     make install-strip DESTDIR=/out; \
-    rm -rf /out/usr/local/include /out/usr/local/lib/pkgconfig /out/usr/local/share/doc /out/usr/local/share/man; \
+    rm -rf /out/usr/local/include /out/usr/local/lib/cmake /out/usr/local/lib/pkgconfig /out/usr/local/share/doc /out/usr/local/share/man; \
     rm -f /out/usr/local/bin/*-config /out/usr/local/lib/*.la
 COPY --link policy.xml /out/usr/local/etc/ImageMagick-7/policy.xml
 
@@ -92,8 +162,15 @@ RUN --mount=type=bind,source=runtime-deps.ubuntu,target=/tmp/runtime-deps.extra 
     meta=/out/usr/local/share/randomcontainers/imagemagick; \
     mkdir -p "$meta/licenses"; \
     cp LICENSE NOTICE "$meta/licenses/"; \
+    cp /src/libde265/COPYING "$meta/licenses/COPYING.libde265"; \
+    cp /src/libheif/COPYING "$meta/licenses/COPYING.libheif"; \
     echo "${VERSION}" > "$meta/version"; \
-    echo "https://github.com/ImageMagick/ImageMagick/releases/download/${VERSION}/ImageMagick-${VERSION}.tar.xz" > "$meta/source"; \
+    printf '%s\n' \
+      "https://github.com/ImageMagick/ImageMagick/releases/download/${VERSION}/ImageMagick-${VERSION}.tar.xz" \
+      "https://github.com/strukturag/libde265/releases/download/v${LIBDE265_VERSION}/libde265-${LIBDE265_VERSION}.tar.gz" \
+      "https://github.com/strukturag/libheif/releases/download/v${LIBHEIF_VERSION}/libheif-${LIBHEIF_VERSION}.tar.gz" \
+      "https://github.com/randomcontainers/imagemagick/releases/tag/v${VERSION}" \
+      > "$meta/source"; \
     LD_LIBRARY_PATH=/out/usr/local/lib /out/usr/local/bin/magick -version > /tmp/magick-version; \
     grep -q "^Version: ImageMagick ${VERSION} Q16-HDRI " /tmp/magick-version; \
     missing=; \
@@ -104,9 +181,12 @@ RUN --mount=type=bind,source=runtime-deps.ubuntu,target=/tmp/runtime-deps.extra 
       grep '^Delegates' /tmp/magick-version | grep -qw "$d" || missing="$missing $d"; \
     done; \
     if [ -n "$missing" ]; then cat /tmp/magick-version >&2; echo "missing:$missing" >&2; exit 1; fi; \
+    readelf -d /out/usr/local/lib/ImageMagick-*/modules-*/coders/heic.so | grep -Eq 'Library (rpath|runpath): \[/usr/local/lib'; \
     { \
       echo "base: ${BASE_IMAGE}"; \
       echo "compiler: $(cc --version | head -n 1)"; \
+      echo "libde265: ${LIBDE265_VERSION}"; \
+      echo "libheif: ${LIBHEIF_VERSION}"; \
       sed -n 's/^  \$ \(\.\/configure .*\)/\1/p' config.log; \
       cat /tmp/magick-version; \
     } > "$meta/buildinfo"; \
