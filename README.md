@@ -11,8 +11,6 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" \
   ghcr.io/randomcontainers/imagemagick input.png -resize 50% output.webp
 ```
 
-The same images can also be pulled as `randomcontainers.com/imagemagick`.
-
 Render the first page of a PDF at 150 dpi. Reading a PDF needs Ghostscript, which is in the default image but not in `slim`:
 
 ```sh
