@@ -10,10 +10,10 @@ upstream:
   tag-pattern: '^(7\.\d+\.\d+-\d+)$'
   version-template: '{1}'
   versioning: loose
-  version: 7.1.2-32
+  version: 7.1.2-33
   artifact:
     url: https://github.com/ImageMagick/ImageMagick/releases/download/{version}/ImageMagick-{version}.tar.xz
-    sha256: abc38dad4adfbab671857822499e69c8745278a914f5d38517baecd400b820c2
+    sha256: ea9006be742bef04af734ffc6c641f68a511221a97f40ba61dba8f9a356cfd0d
   # HEIC and AVIF support. The hashes are the digests GitHub records for the
   # release assets.
   extra-artifacts:
